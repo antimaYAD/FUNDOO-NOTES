@@ -1,4 +1,5 @@
 import re
+from django.core.mail import EmailMessage
 
 # Example regex patterns
 EMAIL_REGEX = r'^[\w\.-]+@[\w\.-]+\.\w+$'  # Valid email format
@@ -22,3 +23,8 @@ def is_validate_name(name):
     if  re.match(NAME_REGEX, name):
         return False
     return True
+
+
+# def send_mail(data):
+#     email = EmailMessage(subject=data['email_subject'],body=data['email_body'],to=[data('to_email')])
+#     email.send()

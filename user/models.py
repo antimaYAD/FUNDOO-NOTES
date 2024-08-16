@@ -9,6 +9,7 @@ from .managers import CustomUserManager
 class User(AbstractUser):
     username =  None
     email = models.EmailField(_("email address"), unique=True)
+    is_verified=models.BooleanField(default=False)
     
     
     USERNAME_FIELD = "email"
