@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from loguru import logger
 
 load_dotenv(dotenv_path=".env")
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -186,3 +187,27 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_USER_HOST')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_USER_HOST')
+
+
+
+
+LOG_DIR = Path(f"{BASE_DIR}/logs")
+
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGURU_SETTINGS = {
+    "handlers": [
+        {
+            "sink": LOG_DIR / "error.log",  # Using Path to define the log file path
+            "level": "ERROR",
+            "format": "{time} - {level} - {message}",
+            "rotation": "10 MB",
+            "compression": "zip",
+            "serialize": False
+        },
+    ],
+}
+
+# Apply the Loguru settings
+for handler in LOGURU_SETTINGS["handlers"]:
+    logger.add(**handler)
