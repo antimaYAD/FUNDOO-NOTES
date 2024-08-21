@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from .models import Note
 from .serializers import NoteSerializer
 from loguru import logger
+from django.core.cache import cache
 
 class NoteViewSet(viewsets.ModelViewSet):
     """
@@ -30,6 +31,7 @@ class NoteViewSet(viewsets.ModelViewSet):
         try:
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
+            cache.set(f"user_{request.user.id}",queryset,timeout=300)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Error retrieving notes: {str(e)}")
