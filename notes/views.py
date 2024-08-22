@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from .models import Note
 from .serializers import NoteSerializer
 from loguru import logger
-from django.core.cache import cache
+from .redisutil import RedisUtils
 
 class NoteViewSet(viewsets.ModelViewSet):
     """
@@ -17,6 +17,7 @@ class NoteViewSet(viewsets.ModelViewSet):
     serializer_class = NoteSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    redis = RedisUtils()
 
     def get_queryset(self):
         """
@@ -29,10 +30,19 @@ class NoteViewSet(viewsets.ModelViewSet):
         List all notes for the logged-in user that are not archived or trashed.
         """
         try:
+            cache_key = f"user_{request.user.id}"
+            cache_note = self.redis.get(cache_key)
+
+            if cache_note:
+                logger.info(f"Notes feteched from the cache for user {request.user.id}")
+                return Response({"Message":"The list of cache notes of user","satus":"Sucess","data":cache_note},status=status.HTTP_200_OK)
+                
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
-            cache.set(f"user_{request.user.id}",queryset,timeout=300)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            self.redis.save(cache_key,serializer.data,ex=300)
+            return Response({"Message":"The list of notes of user ","status":"Sucess","data":serializer.data},status=status.HTTP_200_OK)
+            
         except Exception as e:
             logger.error(f"Error retrieving notes: {str(e)}")
             return Response({
@@ -48,8 +58,14 @@ class NoteViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save(user=request.user)
+            cache_key = f"user_{request.user.id}"
+            cache_note = self.redis.get(cache_key)
+            if cache_note is None:
+                cache_note=[]
+            cache_note.append(serializer.data)
+            self.redis.save(cache_key,cache_note,ex=300)
             headers = self.get_success_headers(serializer.data)
-            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            return Response({"Message":"The notes  is created of user ","satus":"Sucess","data":serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
         except Exception as e:
             logger.error(f"Error creating note: {str(e)}")
             return Response({
@@ -62,9 +78,15 @@ class NoteViewSet(viewsets.ModelViewSet):
         Retrieve a specific note by its ID.
         """
         try:
+            cache_key = f"user_{request.user.id}_note_{pk}"
+            cache_note = self.redis.get(cache_key)
+            if cache_note:
+                logger.info(f"Notes are  fetched from the cache of user {cache_key}")
+                return Response({"Message":"The data of the retrive note from cache","satus":"Sucess","data":cache_note},status=status.HTTP_200_OK)   
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            return Response(serializer.data)
+            self.redis.save(cache_key, serializer.data, ex=300) 
+            return Response({"Message":"The data of the retrive note","satus":"Sucess","data":serializer.data},status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Error retrieving note with ID {pk}: {str(e)}")
             return Response({
@@ -81,7 +103,13 @@ class NoteViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance, data=request.data, partial=False)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
-            return Response(serializer.data)
+            note_cache_key = f"user_{request.user.id}_note_{pk}"
+            self.redis.save(note_cache_key,serializer.data,ex=300)
+            cache_key = f"user_{request.user.id}"
+            queryset = self.get_queryset()
+            self.redis.save(cache_key,self.get_serializer(queryset,many=True).data,ex=300)
+            return Response({"Message":"The note is updated","satus":"Sucess","data":serializer.data},status=status.HTTP_200_OK)
+            
         except Exception as e:
             logger.error(f"Error updating note with ID {pk}: {str(e)}")
             return Response({
@@ -98,7 +126,13 @@ class NoteViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
-            return Response(serializer.data)
+            note_cache_key = f"user_{request.user.id}_note_{pk}"
+            self.redis.save(note_cache_key,serializer.data,ex=300)
+            cache_key =  f"user_{request.user.id}"
+            queryset=self.get_queryset()
+            self.redis.save(cache_key,self.get_serializer(queryset,many=True).data,ex=300)
+            return Response({"Message":"The note is partial updated","satus":"Sucess","data":serializer.data},status=status.HTTP_200_OK)
+            
         except Exception as e:
             logger.error(f"Error partially updating note with ID {pk}: {str(e)}")
             return Response({
@@ -113,7 +147,15 @@ class NoteViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
             self.perform_destroy(instance)
-            return Response(status=status.HTTP_204_NO_CONTENT)
+            note_cache_key = f"user_{request.user.id}_note_{pk}"
+            
+            self.redis.delete(note_cache_key)
+            cache_key = f"user_{request.user.id}"
+            queryset = self.get_queryset()
+            self.redis.save(cache_key,self.get_serializer(queryset,many=True).data,ex=300)
+            
+            return Response({"Message":"The note is deleted","satus":"Sucess"},status=status.HTTP_200_OK)
+            
         except Exception as e:
             logger.error(f"Error deleting note with ID {pk}: {str(e)}")
             return Response({
@@ -128,9 +170,22 @@ class NoteViewSet(viewsets.ModelViewSet):
         """
         try:
             note = Note.objects.get(id=pk,user=request.user)
-           
+        
             note.is_archive = not note.is_archive
             note.save()
+            
+            note_cache_key = f"user_{request.user.id}"
+            
+            note_cache_data = self.redis.get(note_cache_key)
+
+            if note_cache_data:
+                for cache_note in note_cache_data:
+                    if cache_note['id'] == pk:           
+                        cache_note['is_archive'] = note.is_archive
+                self.redis.save(note_cache_key,note_cache_data,ex=300)
+                logger.info(f"Note {pk} archive status toggled in cache bjjlfor user {request.user.id}")
+
+            
             return Response({
                 'message': 'Note archive status toggled successfully.',
                 'data': NoteSerializer(note).data
@@ -148,8 +203,17 @@ class NoteViewSet(viewsets.ModelViewSet):
         List all archived notes for the logged-in user.
         """
         try:
+            note_cache_key = f"user_{request.user.id}_archived_notes"
+            note_cache_data = self.redis.get(note_cache_key)
+            if note_cache_data:
+                logger.info(f"Archived Notes feteched from the cache for user {request.user.id}")
+                
+        
+                return Response({"Message":"Archived notes retrived from cache","satus":"Sucess","data":note_cache_data},status=status.HTTP_200_OK)   
+                            
             queryset = Note.objects.filter(user=request.user, is_archive=True)
             serializer = NoteSerializer(queryset, many=True)
+            self.redis.save(note_cache_key,serializer.data,ex=300)
             return Response({
                 'message': 'Archived notes retrieved successfully.',
                 'data': serializer.data
@@ -169,9 +233,16 @@ class NoteViewSet(viewsets.ModelViewSet):
         """
         try:
             note = Note.objects.get(id=pk,user=request.user)
-            print(note)
             note.is_trash = not note.is_trash
             note.save()
+            
+            note_cache_key = f"user_{request.user.id}"
+            note_cache_data = self.redis.get(note_cache_key)
+            if note_cache_data:
+                for cache_note in note_cache_data:
+                    if cache_note['id'] == pk:
+                        cache_note['is_trash'] = note.is_trash
+                self.redis.save(note_cache_key,note_cache_data,ex=300)
             return Response({
                 'message': 'Note trash status toggled successfully.',
                 'data': NoteSerializer(note).data
@@ -189,8 +260,20 @@ class NoteViewSet(viewsets.ModelViewSet):
         List all trashed notes for the logged-in user.
         """
         try:
+            note_cache_key = f"user_{request.user.id}"
+            note_cache_data = self.redis.get(note_cache_key)
+            if note_cache_data:
+                logger.info(f"Trash note of user {request.user.id}")
+                return Response({
+                'message': 'Trashed notes retrieved from cache successfully.',
+                'data': note_cache_data
+            }, status=status.HTTP_200_OK)
+                
+
+            
             queryset = Note.objects.filter(user=request.user, is_trash=True)
             serializer = NoteSerializer(queryset, many=True)
+            self.redis.save(note_cache_key,serializer.data,ex=300)
             return Response({
                 'message': 'Trashed notes retrieved successfully.',
                 'data': serializer.data
