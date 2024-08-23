@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from rest_framework.decorators import api_view
 import jwt
+from .task import send_email_task
 
 
 class RegistrationUser(APIView):
@@ -26,16 +27,18 @@ class RegistrationUser(APIView):
             access_token = str(token.access_token)
             # # refresh_token = str(token)
             link=reverse('verify_email',args=[access_token],request=request)
+            # link = request.build_absolute_uri(reverse('verify_email', args=[access_token]))
             # print(link)
             email_subject = 'Verify your email address'
             email_body = f'Use this token to verify your email: {link}'
-            send_mail(
-                email_subject,
-                email_body,
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=False,
-            )
+            # send_mail(
+            #     email_subject,
+            #     email_body,
+            #     settings.DEFAULT_FROM_EMAIL,
+            #     [user.email],
+            #     fail_silently=False,
+            # )
+            send_email_task.delay(email_subject,email_body,user.email)
             
             return Response({"message": "User created successfully", "status": "Success","data":serializer.data}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)

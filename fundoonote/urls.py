@@ -24,7 +24,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/",include("user.urls")),
     path('api/', include("notes.urls")),
-    path('label/',include("label.urls"))
+    path('label/',include("label.urls")),
    
     # path("register/", register_user, name="register"),
     # path("login/", login_user, name="login"),

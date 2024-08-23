@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "user",
     "rest_framework",
     'rest_framework_simplejwt',
+    "django_celery_results",
     "notes",
     "label"
 ]
@@ -85,12 +86,11 @@ WSGI_APPLICATION = "fundoonote.wsgi.application"
 DATABASES = {
      "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "User",
-        "USER": "postgres",
-        "PASSWORD": "Antima@123",
+        "NAME": os.environ.get('DATABASE_NAME'),
+        "USER": os.environ.get('DATABASE_USER'),
+        "PASSWORD": os.environ.get('DATABASE_PASSWORD'),
         "HOST" : "localhost",
         "PORT" : "5432",
-        
     }
 }
 
@@ -217,9 +217,18 @@ for handler in LOGURU_SETTINGS["handlers"]:
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": os.environ.get('LOCATION'),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     }
 }
+
+
+
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_RESULT_SERIALIZER = os.environ.get('CELERY_RESULT_SERIALIZER')
+CELERY_TASK_SERIALIZER = os.environ.get('CELERY_TASK_SERIALIZER')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
+CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE')
