@@ -27,8 +27,6 @@ class RegistrationUser(APIView):
             access_token = str(token.access_token)
             # # refresh_token = str(token)
             link=reverse('verify_email',args=[access_token],request=request)
-            # link = request.build_absolute_uri(reverse('verify_email', args=[access_token]))
-            # print(link)
             email_subject = 'Verify your email address'
             email_body = f'Use this token to verify your email: {link}'
             # send_mail(

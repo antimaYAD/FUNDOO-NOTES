@@ -8,6 +8,10 @@ from .models import Note
 from .serializers import NoteSerializer
 from loguru import logger
 from .redisutil import RedisUtils
+from django_celery_beat.models import PeriodicTask, CrontabSchedule
+from datetime import datetime
+from user.task import send_reminder
+import json
 
 class NoteViewSet(viewsets.ModelViewSet):
     """
@@ -49,15 +53,60 @@ class NoteViewSet(viewsets.ModelViewSet):
                 'error': 'An error occurred while retrieving notes.',
                 'detail': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+            
+    def sechdule_reminder(self,note,reminder_time):
+        try:
+           
+            reminder_time=datetime.strptime(reminder_time, "%Y-%m-%dT%H:%M")
+            # print(reminder_time)
+            task_name = f'reminder-task-{note.id}'
+            periodic_task= PeriodicTask.objects.filter(name=task_name).first()
+
+        # Create or get a CrontabSchedule that matches the reminder time
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute=reminder_time.minute,
+                hour=reminder_time.hour,
+                day_of_month=reminder_time.day,
+                month_of_year=reminder_time.month,
+                day_of_week='*',
+            )
+                
+            if periodic_task:
+                periodic_task.crontab=schedule
+                periodic_task.args = json.dumps([note.id])
+                periodic_task.save()
+                logger.info(f"Updated reminder task for note {note.id}")
+                
+            else:
+
+            # Create a PeriodicTask to run the send_reminder task
+                PeriodicTask.objects.create(
+                    crontab=schedule,
+                    name=task_name,
+                    task='user.task.send_reminder',
+                    args=json.dumps([note.id]),
+                    one_off=True,
+                )
+            
+        except Exception as e:
+            logger.error(f"Error scheduling reminder: {str(e)}")
+                
+
 
     def create(self, request, *args, **kwargs):
         """
         Create a new note for the logged-in user.
         """
         try:
+            request.data.update(user=request.user.id)
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save(user=request.user)
+            note_id = serializer.data['id']
+        
+        # Schedule the reminder if it exists
+            if serializer.instance.reminder:
+                self.sechdule_reminder(serializer.instance,request.data['reminder'])
             cache_key = f"user_{request.user.id}"
             cache_note = self.redis.get(cache_key)
             if cache_note is None:
@@ -65,7 +114,7 @@ class NoteViewSet(viewsets.ModelViewSet):
             cache_note.append(serializer.data)
             self.redis.save(cache_key,cache_note,ex=300)
             headers = self.get_success_headers(serializer.data)
-            return Response({"Message":"The notes  is created of user ","satus":"Sucess","data":serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
+            return Response({"Message":"The notes  is created of user ","satus":"Sucess","data":serializer.data}, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error(f"Error creating note: {str(e)}")
             return Response({
@@ -99,10 +148,14 @@ class NoteViewSet(viewsets.ModelViewSet):
         Update a specific note by its ID.
         """
         try:
-            instance = self.get_object()
+            request.data.update(user=request.user.id)
+            instance = Note.objects.get(id=pk,user=request.user)
             serializer = self.get_serializer(instance, data=request.data, partial=False)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
+            # self.sechdule_reminder(pk)
+            if serializer.instance.reminder:
+                self.sechdule_reminder(serializer.instance,request.data['reminder'])
             note_cache_key = f"user_{request.user.id}_note_{pk}"
             self.redis.save(note_cache_key,serializer.data,ex=300)
             cache_key = f"user_{request.user.id}"
@@ -122,10 +175,14 @@ class NoteViewSet(viewsets.ModelViewSet):
         Partially update a specific note by its ID.
         """
         try:
-            instance = self.get_object()
+            request.data.update(user=request.user.id)
+            instance = Note.objects.get(id=pk,user=request.user)
             serializer = self.get_serializer(instance, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
+            serializer.is_valid(raise_exception=True) 
             self.perform_update(serializer)
+            
+            if serializer.instance.reminder:
+                self.sechdule_reminder(serializer.instance,request.data['reminder'])
             note_cache_key = f"user_{request.user.id}_note_{pk}"
             self.redis.save(note_cache_key,serializer.data,ex=300)
             cache_key =  f"user_{request.user.id}"
@@ -284,3 +341,6 @@ class NoteViewSet(viewsets.ModelViewSet):
                 'error': 'An error occurred while retrieving trashed notes.',
                 'detail': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+            
+            
+    
