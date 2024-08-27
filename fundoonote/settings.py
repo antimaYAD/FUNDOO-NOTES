@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     "user",
     "notes",
+    'drf_yasg',
     "label"
 ]
 
@@ -234,3 +235,10 @@ CELERY_TASK_SERIALIZER = os.environ.get('CELERY_TASK_SERIALIZER')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
 CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE')
 CELERY_BEAT_SCHEDULER = os.environ.get('CELERY_BEAT_SCHEDULER')
+
+
+
+SWAGGER_SETTINGS = {
+    "USE_SESSION_AUTH": False,
+    "SECURITY_DEFINITIONS": {"Bearer": {"type": "apiKey", "name": "Authorization", "in": "header"}},
+}

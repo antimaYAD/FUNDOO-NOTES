@@ -12,8 +12,11 @@ from django_celery_beat.models import PeriodicTask, CrontabSchedule
 from datetime import datetime
 from user.task import send_reminder
 import json
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 class NoteViewSet(viewsets.ModelViewSet):
+    
     """
     A viewset for viewing and editing note instances.
     """
@@ -22,6 +25,12 @@ class NoteViewSet(viewsets.ModelViewSet):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     redis = RedisUtils()
+    
+    """ Swagger_atuo_schema()"""
+    @swagger_auto_schema( operation_description="An Notes curd operatuon API endpoint",
+        request_body=NoteSerializer,
+        responses={200: NoteSerializer(many=True)})
+    
 
     def get_queryset(self):
         """
@@ -90,8 +99,7 @@ class NoteViewSet(viewsets.ModelViewSet):
             
         except Exception as e:
             logger.error(f"Error scheduling reminder: {str(e)}")
-                
-
+         
 
     def create(self, request, *args, **kwargs):
         """

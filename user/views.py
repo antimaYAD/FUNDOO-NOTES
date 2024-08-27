@@ -13,9 +13,16 @@ from django.core.mail import send_mail
 from rest_framework.decorators import api_view
 import jwt
 from .task import send_email_task
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 
 
 class RegistrationUser(APIView):
+    
+    @swagger_auto_schema( operation_description="An User Regsitration  API endpoint",
+        request_body=UserRegistrationSerializer,
+        responses={200: UserRegistrationSerializer(many=True)})
     
     def post(self,request):
         
@@ -29,13 +36,6 @@ class RegistrationUser(APIView):
             link=reverse('verify_email',args=[access_token],request=request)
             email_subject = 'Verify your email address'
             email_body = f'Use this token to verify your email: {link}'
-            # send_mail(
-            #     email_subject,
-            #     email_body,
-            #     settings.DEFAULT_FROM_EMAIL,
-            #     [user.email],
-            #     fail_silently=False,
-            # )
             send_email_task.delay(email_subject,email_body,user.email)
             
             return Response({"message": "User created successfully", "status": "Success","data":serializer.data}, status=status.HTTP_201_CREATED)
@@ -43,6 +43,10 @@ class RegistrationUser(APIView):
     
        
 class LoginUser(APIView):
+    
+    @swagger_auto_schema( operation_description="An User Login  API endpoint",
+        request_body=UserLoginSerializer,
+        responses={200: UserLoginSerializer(many=True)})
     
     def post(self,request):
         serializer = UserLoginSerializer(data=request.data)
@@ -52,6 +56,7 @@ class LoginUser(APIView):
         token = RefreshToken.for_user(serializer.instance)
         
         return Response({"Message": "Login successful", "status": "Success","data":{'refresh':str(token),'access':str(token.access_token)}},status=status.HTTP_200_OK)
+   
     
 @api_view(["GET"])
 def verify_email(request,token):
