@@ -463,10 +463,14 @@ class CollaboratorView(viewsets.ViewSet):
     operation_description="Add collaborator of the note API endpoint",
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=['note_id', 'user_id'],
+        required=['note_id', 'user_id','access_type'],
         properties={
             'note_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the note'),
             'user_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), description='List of user IDs to add'),
+            'access_type': openapi.Schema(
+                type=openapi.TYPE_STRING, 
+                description='Type of access for the collaborator', 
+                enum=['read_only', 'read_write']),
         }
     ),
     responses={
