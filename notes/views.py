@@ -4,16 +4,20 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import action
-from .models import Note
-from .serializers import NoteSerializer
+from .models import Note ,Collaborator
+from user.models import User
+from .serializers import NoteSerializer , CollaboratorSerializer
 from loguru import logger
 from .redisutil import RedisUtils
 from django_celery_beat.models import PeriodicTask, CrontabSchedule
 from datetime import datetime
 from user.task import send_reminder
+from django.shortcuts import get_object_or_404
 import json
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from django.db.models import Q
+from label.models import Label
 
 class NoteViewSet(viewsets.ModelViewSet):
     
@@ -31,12 +35,15 @@ class NoteViewSet(viewsets.ModelViewSet):
         request_body=NoteSerializer,
         responses={200: NoteSerializer(many=True)})
     
-
+ 
     def get_queryset(self):
         """
         Returns notes for the logged-in user with is_archive and is_trash as False.
         """
-        return Note.objects.filter(user=self.request.user, is_archive=False, is_trash=False)
+        lookup=Q(user=self.request.user)|Q(collaborator__id=self.request.user.id)
+        return Note.objects.filter(lookup,is_archive=False, is_trash=False).distinct('id')
+        
+        # return Note.objects.filter(user=self.request.user, is_archive=False, is_trash=False)
 
     def list(self, request, *args, **kwargs):
         """
@@ -45,13 +52,17 @@ class NoteViewSet(viewsets.ModelViewSet):
         try:
             cache_key = f"user_{request.user.id}"
             cache_note = self.redis.get(cache_key)
+            print(cache_note)
 
             if cache_note:
                 logger.info(f"Notes feteched from the cache for user {request.user.id}")
                 return Response({"Message":"The list of cache notes of user","satus":"Sucess","data":cache_note},status=status.HTTP_200_OK)
                 
             queryset = self.get_queryset()
+            # print(f"querset = {queryset}")
             serializer = self.get_serializer(queryset, many=True)
+            # print(f"ser = {serializer}")
+            
             
             self.redis.save(cache_key,serializer.data,ex=300)
             return Response({"Message":"The list of notes of user ","status":"Sucess","data":serializer.data},status=status.HTTP_200_OK)
@@ -156,8 +167,27 @@ class NoteViewSet(viewsets.ModelViewSet):
         Update a specific note by its ID.
         """
         try:
-            request.data.update(user=request.user.id)
-            instance = Note.objects.get(id=pk,user=request.user)
+            
+            # request.data.update(user=request.user.id)
+            # user=request.user,collaborator__id=self.request.user.id
+            # instance = self.get_object()
+            instance = Note.objects.get(id=pk)
+            if instance.user.id == request.user.id:
+                data = request.data.copy()
+                data['user'] = request.user.id
+                
+            else:
+                collabrator = instance.collaborators_set.filter(user_id=request.user.id).first()
+                
+                if collabrator is None:
+                    return Response({"Message":"You are not collaborator of this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+                if collabrator.access_type == "read_only":
+                    return Response({"Message":"You only have read_only permission on this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                    
+                data = request.data.copy()
+                data.pop('user',None)    
+                        
             serializer = self.get_serializer(instance, data=request.data, partial=False)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
@@ -183,8 +213,27 @@ class NoteViewSet(viewsets.ModelViewSet):
         Partially update a specific note by its ID.
         """
         try:
-            request.data.update(user=request.user.id)
-            instance = Note.objects.get(id=pk,user=request.user)
+            
+            
+            # instance = Note.objects.get(id=pk,user=request.user,collaborator__id=self.request.user.id)
+            instance = Note.objects.get(id=pk)
+            # user=request.user,collaborator__id=self.request.user.id
+            # instance = self.get_object()
+            if instance.user.id == request.user.id:
+                data = request.data.copy()
+                data['user'] = request.user.id
+                
+            else:
+                collabrator = instance.collaborators_set.filter(user_id=request.user.id).first()
+                
+                if collabrator is None:
+                    return Response({"Message":"You are not collaborator of this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+                if collabrator.access_type == "read_only":
+                    return Response({"Message":"You only have read_only permission on this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                    
+                data = request.data.copy()
+                data.pop('user',None)    
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True) 
             self.perform_update(serializer)
@@ -210,8 +259,25 @@ class NoteViewSet(viewsets.ModelViewSet):
         Delete a specific note by its ID.
         """
         try:
-            instance = self.get_object()
-            self.perform_destroy(instance)
+            instance = Note.objects.get(id=pk)
+
+            if instance.user.id == request.user.id:
+                self.perform_destroy(instance)
+                
+                
+            else:
+                
+                collabrator = instance.collaborators_set.filter(user_id=request.user.id).first()
+                
+                if collabrator is None:
+                    return Response({"Message":"You are not collaborator of this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+                if collabrator.access_type == "read_only":
+                    return Response({"Message":"You only have read_only permission on this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                    
+                self.perform_destroy(instance)
+                
+            
             note_cache_key = f"user_{request.user.id}_note_{pk}"
             
             self.redis.delete(note_cache_key)
@@ -234,9 +300,22 @@ class NoteViewSet(viewsets.ModelViewSet):
         Toggle the archive status of a note.
         """
         try:
-            note = Note.objects.get(id=pk,user=request.user)
-        
-            note.is_archive = not note.is_archive
+            note = Note.objects.get(id=pk)
+            
+            if note.user.id == request.user.id:
+                note.is_archived = not note.is_archived
+                
+            else :
+                collabrator = note.collaborators_set.filter(user_id=request.user.id).first()
+                
+                if collabrator is None:
+                    return Response({"Message":"You are not collaborator of this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+                if collabrator.access_type == "read_only":
+                    return Response({"Message":"You only have read_only permission on this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+                note.is_archive = not note.is_archive
+                
             note.save()
             
             note_cache_key = f"user_{request.user.id}"
@@ -297,8 +376,21 @@ class NoteViewSet(viewsets.ModelViewSet):
         Toggle the trash status of a note.
         """
         try:
-            note = Note.objects.get(id=pk,user=request.user)
-            note.is_trash = not note.is_trash
+            note = Note.objects.get(id=pk)
+            if note.user.id == request.user.id:
+                note.is_trash = not note.is_trash
+                
+            else :
+                collabrator = note.collaborators_set.filter(user_id=request.user.id).first()
+                
+                if collabrator is None:
+                    return Response({"Message":"You are not collaborator of this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+                if collabrator.access_type == "read_only":
+                    return Response({"Message":"You only have read_only permission on this note","satus":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+                note.is_trash = not note.is_trash
+                
             note.save()
             
             note_cache_key = f"user_{request.user.id}"
@@ -352,3 +444,229 @@ class NoteViewSet(viewsets.ModelViewSet):
             
             
     
+class CollaboratorView(viewsets.ViewSet):
+    
+    queryset = Collaborator.objects.all()
+    serializer_class = CollaboratorSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    redis = RedisUtils()
+    
+    
+    
+
+    
+    def get_queryset(self):
+        return Collaborator.objects.filter(user=self.request.user)
+    
+    @swagger_auto_schema(
+    operation_description="Add collaborator of the note API endpoint",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['note_id', 'user_id'],
+        properties={
+            'note_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the note'),
+            'user_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), description='List of user IDs to add'),
+        }
+    ),
+    responses={
+        200: 'Collaborator Added successfully',
+        403: 'You are not the owner of this note',
+        404: 'One or more labels not found',
+        400: 'Invalid input',
+    }
+)       
+  
+    
+    @action(detail=False, methods=['post'], url_path='add_collaborator', permission_classes=[IsAuthenticated])
+    def add_collaborator(self,request,*args, **kwargs):
+      
+        request.data.update(user=request.user.id)
+            
+        note_id = request.data.get('note_id')
+        user_ids = request.data.get('user_id', [])
+        access_type = request.data.get('access_type', Collaborator.read_only)
+
+        try:
+            # Retrieve the note object
+            note = get_object_or_404(Note, id=note_id)
+
+            # Check if the request user is the owner of the note
+            if note.user != request.user:
+                return Response({"error": "You are not the owner of this note."}, status=status.HTTP_403_FORBIDDEN)
+
+            # Prepare data for the serializer
+            collaborators_to_create = []
+
+            users = User.objects.filter(id__in=user_ids)
+            for user in users:
+    
+                if note.user == user:
+                    return Response({"error": "The note owner cannot be added as a collaborator."}, status=status.HTTP_400_BAD_REQUEST)
+                    
+
+                # Add data to the list for bulk creation
+                collaborators_to_create.append({
+                    'note_id': note.id,
+                    'user_id': user.id,
+                    'access_type': access_type
+                })
+                
+                
+            serializer = CollaboratorSerializer(data=collaborators_to_create, many=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            
+            return Response({"message": "Collaborators added successfully.","status":"Success","data":serializer.data}, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            logger.error(f"Error adding collaborator: {str(e)}")
+            return Response({"error": "An error occurred while adding collaborators.", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    
+    @swagger_auto_schema(
+    operation_description="remove collaborator of the note API endpoint",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['note_id', 'user_id'],
+        properties={
+            'note_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the note'),
+            'user_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), description='List of user IDs to add'),
+        }
+    ),
+    responses={
+        200: 'Collaborator Remove successfully',
+        403: 'You are not the owner of this note',
+        404: 'One or more labels not found',
+        400: 'Invalid input',
+    }
+)       
+    @action(detail=False, methods=['post'], url_path='remove_collaborator', permission_classes=[IsAuthenticated])
+       
+    def remove_collaborator(self,request,*args, **kwargs):
+        
+        note_id = request.data.get('note_id')
+        user_ids = request.data.get('user_id',[])
+        
+        note = Note.objects.filter(id=note_id).first()
+        if not note:
+            return Response({"error": "Note not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        Collaborator.objects.filter(note_id=note_id,user_id__in=user_ids).delete()
+        
+        return Response({"message":"Collaborator removed Successsfully"}, status=status.HTTP_204_NO_CONTENT)
+    
+class LabelsAddRemove(viewsets.ViewSet):
+    
+    """ This class is use to add and remove the notes"""
+    
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    redis = RedisUtils()
+    
+    @swagger_auto_schema(
+    operation_description="Add labels to a note",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['note_id', 'label'],
+        properties={
+            'note_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the note'),
+            'label': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), description='List of label IDs to add'),
+        }
+    ),
+    responses={
+        200: 'Labels added successfully',
+        403: 'You are not the owner of this note',
+        404: 'One or more labels not found',
+        400: 'Invalid input',
+    }
+)
+    
+    @action(detail=False,url_path="add_labels",methods=['post'],permission_classes=[IsAuthenticated])
+    def add_label(self, request, *args, **kwargs):
+        try:
+            request.data.update(user=request.user.id)
+            note_id = request.data.get('note_id')
+            label_id = request.data.get('label',[])
+            
+            note = Note.objects.filter(id=note_id).first()
+
+            # Check if the request user is the owner of the note
+            if note.user != request.user:
+                return Response({"error": "You are not the owner of this note."}, status=status.HTTP_403_FORBIDDEN)
+
+            # Prepare data for the serializer
+            labels = Label.objects.filter(id__in=label_id)
+            
+            if labels is None:
+                return Response({"error": "Label not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            for label in labels:
+                if label.user.id != request.user.id:
+                    return Response({"message":"Your not the owner of this label","status":"Error"},status=status.HTTP_403_FORBIDDEN)
+                
+            note.label.add(*labels)
+            
+            return Response({"message":"You added label Successfully","status":"Success"},status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            
+            logger.error(f"Error adding Label: {str(e)}")
+
+    
+    
+            return Response({"error": "An error occurred while adding Labels.", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+   
+   
+    @swagger_auto_schema(
+    operation_description="Remove labels to a note",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['note_id', 'label'],
+        properties={
+            'note_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the note'),
+            'label': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), description='List of label IDs to add'),
+        }
+    ),
+    responses={
+        200: 'Labels remove successfully',
+        403: 'You are not the owner of this note',
+        404: 'One or more labels not found',
+        400: 'Invalid input',
+    }
+)    
+    @action(detail=False,methods=['post'],url_path="remove_labels",permission_classes=[IsAuthenticated])   
+    def remove_label(self,request,*args, **kwargs):
+        try:
+            request.data.update(user=request.user.id)
+            note_id = request.data.get('note_id')
+            label_id = request.data.get('label',[])
+            
+            note = Note.objects.filter(id=note_id).first()
+            
+            if note.user.id != request.user.id:
+                return Response({"message":"Your are not the owner of the label","status":"Error"},status=status.HTTP_403_FORBIDDEN)
+            
+            #Ensure that the label is exists
+            labels = Label.objects.filter(id__in=label_id)
+            if not labels.exists():
+                return Response({"error": "One or more labels not found or not associated with this note."}, status=status.HTTP_404_NOT_FOUND)
+            
+            associated_labels = note.label.filter(id__in=label_id)
+            if not associated_labels.exists():
+                return Response({"error": "One or more labels are not associated with this note."}, status=status.HTTP_404_NOT_FOUND)
+
+
+            # Remove the labels from the note
+            note.label.remove(*associated_labels)
+
+            return Response({"message": "Labels removed successfully", "status": "Success"}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error while remove  Label: {str(e)}")
+            return Response({"error": "An error occurred while remove Labels.", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+            
+            
+            
+            
