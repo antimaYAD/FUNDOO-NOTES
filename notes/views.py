@@ -452,10 +452,6 @@ class CollaboratorView(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     redis = RedisUtils()
     
-    
-    
-
-    
     def get_queryset(self):
         return Collaborator.objects.filter(user=self.request.user)
     

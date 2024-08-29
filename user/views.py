@@ -2,7 +2,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import User
+from .models import User,Log
 from .serializer import UserRegistrationSerializer, UserLoginSerializer
 from django.contrib.auth import authenticate
 from  rest_framework_simplejwt.tokens import RefreshToken
@@ -73,8 +73,5 @@ def verify_email(request,token):
     
         
         
+       
         
-        
-        
-        
-    
