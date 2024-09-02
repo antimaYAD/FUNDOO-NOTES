@@ -34,12 +34,12 @@ class LabelView(mixins.CreateModelMixin,
     #     responses={200: LableSerialiser(many=True)},
     #     manual_parameters=[
     #         openapi.Parameter('pk', openapi.IN_PATH, description="Label ID", type=openapi.TYPE_INTEGER)
-    #     ]
+    #     ]  
     # )
     
     
     def get(self, request, *args, **kwargs):
-        
+                                                                                                 
         request.data.update(user=request.user.id) 
         try:
             if 'pk' in kwargs:
@@ -138,8 +138,12 @@ class LabelViewMainu(
                 self.destroy(request,*args, **kwargs)
                 return Response(status=status.HTTP_204_NO_CONTENT)
             except Exception as e:
-                logger.error(f"Error deleting note with ID {pk}: {str(e)}")
+                logger.error(f"Error deleting note with ID {request.user.id}: {str(e)}")
                 return Response({
                     'error': 'An error occurred while deleting the note.',
                     'detail': str(e)
                 }, status=status.HTTP_400_BAD_REQUEST)
+                
+                
+                
+class RawQueryView :

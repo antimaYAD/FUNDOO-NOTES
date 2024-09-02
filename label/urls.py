@@ -3,8 +3,8 @@ from .views import LabelView , LabelViewMainu
 from django.urls import path, include
 
 urlpatterns = [
-    path('label/', LabelView.as_view(), name='label-list-create'),
-    path('label/<int:pk>/',LabelViewMainu.as_view(), name='label-list-create')
+    path('label/', LabelView.as_view(), name='label'),
+    path('label/<int:pk>/',LabelViewMainu.as_view(), name='label_main'),
 ]
 
 

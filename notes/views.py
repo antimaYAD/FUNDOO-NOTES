@@ -294,7 +294,7 @@ class NoteViewSet(viewsets.ModelViewSet):
                 'detail': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['patch'], url_path='toggle_archive', permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['patch'], url_path='toggle_archive',url_name='toggle_archive', permission_classes=[IsAuthenticated])
     def toggle_archive(self, request, pk=None):
         """
         Toggle the archive status of a note.
@@ -303,7 +303,7 @@ class NoteViewSet(viewsets.ModelViewSet):
             note = Note.objects.get(id=pk)
             
             if note.user.id == request.user.id:
-                note.is_archived = not note.is_archived
+                note.is_archive = not note.is_archive
                 
             else :
                 collabrator = note.collaborators_set.filter(user_id=request.user.id).first()
@@ -341,7 +341,7 @@ class NoteViewSet(viewsets.ModelViewSet):
                 'detail': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['get'], url_path='archived_notes', permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get'], url_path='archived_notes',url_name="archived_notes", permission_classes=[IsAuthenticated])
     def archived_notes(self, request):
         """
         List all archived notes for the logged-in user.
@@ -369,7 +369,7 @@ class NoteViewSet(viewsets.ModelViewSet):
                 'detail': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['patch'], url_path='toggle_trash', permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['patch'], url_path='toggle_trash', url_name='toggle_trash',permission_classes=[IsAuthenticated])
     def toggle_trash(self, request, pk=None):
         
         """
@@ -411,7 +411,7 @@ class NoteViewSet(viewsets.ModelViewSet):
                 'detail': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['get'], url_path='trashed_notes', permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get'], url_path='trashed_notes',url_name='trashed_notes', permission_classes=[IsAuthenticated])
     def trashed_notes(self, request):
         """
         List all trashed notes for the logged-in user.
@@ -478,7 +478,7 @@ class CollaboratorView(viewsets.ViewSet):
 )       
   
     
-    @action(detail=False, methods=['post'], url_path='add_collaborator', permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['post'], url_path='add_collaborator',url_name='add_collaborator', permission_classes=[IsAuthenticated])
     def add_collaborator(self,request,*args, **kwargs):
       
         request.data.update(user=request.user.id)
@@ -541,7 +541,7 @@ class CollaboratorView(viewsets.ViewSet):
         400: 'Invalid input',
     }
 )       
-    @action(detail=False, methods=['post'], url_path='remove_collaborator', permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['post'], url_path='remove_collaborator',url_name='remove_collaborator', permission_classes=[IsAuthenticated])
        
     def remove_collaborator(self,request,*args, **kwargs):
         
@@ -582,7 +582,7 @@ class LabelsAddRemove(viewsets.ViewSet):
     }
 )
     
-    @action(detail=False,url_path="add_labels",methods=['post'],permission_classes=[IsAuthenticated])
+    @action(detail=False,url_name="add_labels",url_path="add_labels",methods=['post'],permission_classes=[IsAuthenticated])
     def add_label(self, request, *args, **kwargs):
         try:
             request.data.update(user=request.user.id)
@@ -596,7 +596,7 @@ class LabelsAddRemove(viewsets.ViewSet):
                 return Response({"error": "You are not the owner of this note."}, status=status.HTTP_403_FORBIDDEN)
 
             # Prepare data for the serializer
-            labels = Label.objects.filter(id__in=label_id)
+            labels = Label.objects.filter(id__in=label_id).first()
             
             if labels is None:
                 return Response({"error": "Label not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -635,7 +635,7 @@ class LabelsAddRemove(viewsets.ViewSet):
         400: 'Invalid input',
     }
 )    
-    @action(detail=False,methods=['post'],url_path="remove_labels",permission_classes=[IsAuthenticated])   
+    @action(detail=False,methods=['post'],url_path="remove_labels",url_name="remove_labels",permission_classes=[IsAuthenticated])   
     def remove_label(self,request,*args, **kwargs):
         try:
             request.data.update(user=request.user.id)
