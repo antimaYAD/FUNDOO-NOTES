@@ -10,7 +10,9 @@ class Label(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     
     
-    
+    class Meta:
+        db_table = 'label'
+        
     def __str__(self):
         return self.name
     

@@ -243,3 +243,18 @@ SWAGGER_SETTINGS = {
     "USE_SESSION_AUTH": False,
     "SECURITY_DEFINITIONS": {"Bearer": {"type": "apiKey", "name": "Authorization", "in": "header"}},
 }
+
+REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+     
+
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/min',  # Rate limit for anonymous users (e.g., 2 requests per min).
+        'user': '50/min',  # Rate limit for authenticated users (e.g., 5 requests per min).
+      
+    }
+}
+

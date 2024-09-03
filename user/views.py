@@ -15,6 +15,8 @@ import jwt
 from .task import send_email_task
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from rest_framework.exceptions import Throttled
+from rest_framework.throttling import UserRateThrottle ,  AnonRateThrottle
 
 
 
@@ -48,11 +50,14 @@ class RegistrationUser(APIView):
        
 class LoginUser(APIView):
     
+    throttle_classes = [AnonRateThrottle]
+    
     @swagger_auto_schema( operation_description="An User Login  API endpoint",
         request_body=UserLoginSerializer,
         responses={200: UserLoginSerializer(many=True)})
     
     def post(self,request):
+        
         try:
             serializer = UserLoginSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -62,6 +67,14 @@ class LoginUser(APIView):
             
             return Response({"Message": "Login successful", "status": "Success","data":{'refresh':str(token),'access':str(token.access_token)}},status=status.HTTP_200_OK)
         
+        except Throttled as th:
+            return Response(
+                {
+                    "message": "Too many login attempts. Please try again in {0} seconds.".format(th.wait),
+                    "status": "Error"
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS)
+            
         except Exception as e:
             return Response({"message": str(e), "status": "Error"}, status=status.HTTP_400_BAD_REQUEST)
     
