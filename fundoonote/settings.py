@@ -89,10 +89,10 @@ WSGI_APPLICATION = "fundoonote.wsgi.application"
 DATABASES = {
      "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get('DATABASE_NAME'),
-        "USER": os.environ.get('DATABASE_USER'),
-        "PASSWORD": os.environ.get('DATABASE_PASSWORD'),
-        "HOST" : "localhost",
+        "NAME": 'fundoo',#os.environ.get('DATABASE_NAME'),
+        "USER": "postgres",#os.environ.get('DATABASE_USER'),
+        "PASSWORD": "Antima-123",#os.environ.get('DATABASE_PASSWORD'),
+        "HOST" : "13.233.145.42",
         "PORT" : "5432",
     }
 }
@@ -188,9 +188,9 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_USER_HOST')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_USER_HOST')
+EMAIL_HOST_USER = "d25ebeb329e8ac" #os.environ.get('EMAIL_USER_HOST')
+EMAIL_HOST_PASSWORD = "227a5c6846386c" #os.environ.get('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = "d25ebeb329e8ac" #os.environ.get('EMAIL_USER_HOST')
 
 
 
@@ -220,7 +220,7 @@ for handler in LOGURU_SETTINGS["handlers"]:
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.environ.get('LOCATION'),
+        "LOCATION": "redis://127.0.0.1:6379/1", #os.environ.get('LOCATION'),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -229,13 +229,13 @@ CACHES = {
 
 
 
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
+CELERY_BROKER_URL = "redis://127.0.0.1:6379/1" #os.environ.get('CELERY_BROKER_URL')
 CELERY_ACCEPT_CONTENT = ['application/json']
-CELERY_RESULT_SERIALIZER = os.environ.get('CELERY_RESULT_SERIALIZER')
-CELERY_TASK_SERIALIZER = os.environ.get('CELERY_TASK_SERIALIZER')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
-CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE')
-CELERY_BEAT_SCHEDULER = os.environ.get('CELERY_BEAT_SCHEDULER')
+CELERY_RESULT_SERIALIZER =  "json" #os.environ.get('CELERY_RESULT_SERIALIZER')
+CELERY_TASK_SERIALIZER = "json" #os.environ.get('CELERY_TASK_SERIALIZER')
+CELERY_RESULT_BACKEND = "django-db" #os.environ.get('CELERY_RESULT_BACKEND')
+CELERY_TIMEZONE = "Asia/Kolkata" #os.environ.get('CELERY_TIMEZONE')
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler" #os.environ.get('CELERY_BEAT_SCHEDULER')
 
 
 
